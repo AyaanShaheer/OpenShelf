@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <record>
+    <dc:title>Digital Literacy in University Libraries</dc:title>
+    <dc:creator>Aisha Rahman</dc:creator>
+    <dc:subject>Education</dc:subject>
+    <dc:description>Study of digital literacy initiatives and student outcomes.</dc:description>
+    <dc:publisher>Education Data Review</dc:publisher>
+    <dc:date>2021-09-01</dc:date>
+    <dc:type>Research Paper</dc:type>
+    <dc:format>PDF</dc:format>
+    <dc:identifier>DOI-10.1000/edr.2021.091</dc:identifier>
+    <dc:source>https://example.org/resources/digital-literacy-university-libraries</dc:source>
+    <dc:language>English</dc:language>
+    <dc:rights>CC BY 4.0</dc:rights>
+  </record>
+  <record>
+    <dc:creator>Unknown Author</dc:creator>
+    <dc:subject>Metadata</dc:subject>
+    <dc:description>Record missing title to demonstrate validation failure.</dc:description>
+    <dc:publisher>Example Press</dc:publisher>
+    <dc:date>2020-01-01</dc:date>
+    <dc:type>Book</dc:type>
+    <dc:format>PDF</dc:format>
+    <dc:identifier>DOI-10.1000/missing.title.2020</dc:identifier>
+    <dc:language>English</dc:language>
+  </record>
+  <record>
+    <dc:title>Digital Literacy in University Libraries</dc:title>
+    <dc:creator>Aisha Rahman</dc:creator>
+    <dc:subject>Education</dc:subject>
+    <dc:identifier>DOI-10.1000/edr.2021.091</dc:identifier>
+    <dc:date>2021-09-01</dc:date>
+    <dc:type>Research Paper</dc:type>
+    <dc:format>PDF</dc:format>
+    <dc:language>English</dc:language>
+  </record>
+</metadata>

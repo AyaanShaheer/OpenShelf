@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schema name="openshelf" version="1.6">
+  <uniqueKey>id</uniqueKey>
+
+  <fieldType name="string" class="solr.StrField" sortMissingLast="true" docValues="true"/>
+  <fieldType name="pint" class="solr.IntPointField" docValues="true"/>
+  <fieldType name="plong" class="solr.LongPointField" docValues="true"/>
+  <fieldType name="pdate" class="solr.DatePointField" docValues="true"/>
+  <fieldType name="text_general" class="solr.TextField" positionIncrementGap="100">
+    <analyzer type="index">
+      <tokenizer class="solr.StandardTokenizerFactory"/>
+      <filter class="solr.LowerCaseFilterFactory"/>
+      <filter class="solr.StopFilterFactory" ignoreCase="true" words="stopwords.txt"/>
+    </analyzer>
+    <analyzer type="query">
+      <tokenizer class="solr.StandardTokenizerFactory"/>
+      <filter class="solr.LowerCaseFilterFactory"/>
+      <filter class="solr.StopFilterFactory" ignoreCase="true" words="stopwords.txt"/>
+    </analyzer>
+  </fieldType>
+
+  <field name="id" type="string" indexed="true" stored="true" required="true"/>
+  <field name="title" type="text_general" indexed="true" stored="true"/>
+  <field name="title_sort" type="string" indexed="true" stored="false" docValues="true"/>
+  <field name="description" type="text_general" indexed="true" stored="true"/>
+  <field name="publisher" type="text_general" indexed="true" stored="true"/>
+  <field name="authors" type="text_general" indexed="true" stored="true" multiValued="true"/>
+  <field name="subjects" type="text_general" indexed="true" stored="true" multiValued="true"/>
+  <field name="subject_facet" type="string" indexed="true" stored="false" multiValued="true" docValues="true"/>
+  <field name="resource_type" type="string" indexed="true" stored="true" docValues="true"/>
+  <field name="language" type="string" indexed="true" stored="true" docValues="true"/>
+  <field name="publication_year" type="pint" indexed="true" stored="true" docValues="true"/>
+  <field name="publication_date" type="pdate" indexed="true" stored="true"/>
+  <field name="isbn_or_identifier" type="string" indexed="true" stored="true"/>
+  <field name="status" type="string" indexed="true" stored="true" docValues="true"/>
+  <field name="created_at" type="pdate" indexed="true" stored="true"/>
+  <field name="updated_at" type="pdate" indexed="true" stored="true"/>
+  <field name="_text_" type="text_general" indexed="true" stored="false" multiValued="true"/>
+
+  <copyField source="title" dest="_text_"/>
+  <copyField source="title" dest="title_sort"/>
+  <copyField source="description" dest="_text_"/>
+  <copyField source="publisher" dest="_text_"/>
+  <copyField source="authors" dest="_text_"/>
+  <copyField source="subjects" dest="_text_"/>
+  <copyField source="subjects" dest="subject_facet"/>
+</schema>

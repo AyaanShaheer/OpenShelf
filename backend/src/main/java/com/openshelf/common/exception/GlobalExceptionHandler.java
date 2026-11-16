@@ -1,0 +1,100 @@
+package com.openshelf.common.exception;
+
+import com.openshelf.common.api.ApiError;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+
+import java.time.Instant;
+import java.util.List;
+
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler(NotFoundException.class)
+    public ResponseEntity<ApiError> handleNotFound(NotFoundException ex, HttpServletRequest request) {
+        return build(HttpStatus.NOT_FOUND, "NOT_FOUND", ex.getMessage(), request, List.of());
+    }
+
+    @ExceptionHandler(BadRequestException.class)
+    public ResponseEntity<ApiError> handleBadRequest(BadRequestException ex, HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST, "BAD_REQUEST", ex.getMessage(), request, List.of());
+    }
+
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ApiError> handleConflict(ConflictException ex, HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, "CONFLICT", ex.getMessage(), request, List.of());
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiError> handleValidation(MethodArgumentNotValidException ex, HttpServletRequest request) {
+        List<ApiError.FieldViolation> violations = ex.getBindingResult().getFieldErrors().stream()
+                .map(this::toViolation)
+                .toList();
+        return build(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "Request validation failed", request, violations);
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ApiError> handleConstraint(ConstraintViolationException ex, HttpServletRequest request) {
+        List<ApiError.FieldViolation> violations = ex.getConstraintViolations().stream()
+                .map(v -> new ApiError.FieldViolation(v.getPropertyPath().toString(), v.getMessage()))
+                .toList();
+        return build(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "Request validation failed", request, violations);
+    }
+
+    @ExceptionHandler({AccessDeniedException.class})
+    public ResponseEntity<ApiError> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
+        return build(HttpStatus.FORBIDDEN, "FORBIDDEN", "Access denied", request, List.of());
+    }
+
+    @ExceptionHandler({AuthenticationException.class})
+    public ResponseEntity<ApiError> handleAuth(AuthenticationException ex, HttpServletRequest request) {
+        return build(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Authentication required", request, List.of());
+    }
+
+    @ExceptionHandler(ServiceUnavailableException.class)
+    public ResponseEntity<ApiError> handleServiceUnavailable(ServiceUnavailableException ex, HttpServletRequest request) {
+        log.warn("Dependency unavailable for path {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.SERVICE_UNAVAILABLE, "SERVICE_UNAVAILABLE", ex.getMessage(), request, List.of());
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiError> handleUploadSize(MaxUploadSizeExceededException ex, HttpServletRequest request) {
+        return build(HttpStatus.PAYLOAD_TOO_LARGE, "UPLOAD_TOO_LARGE", "Uploaded file exceeds the configured size limit", request, List.of());
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiError> handleGeneric(Exception ex, HttpServletRequest request) {
+        log.error("Unhandled exception for path {}", request.getRequestURI(), ex);
+        return build(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "An unexpected error occurred", request, List.of());
+    }
+
+    private ApiError.FieldViolation toViolation(FieldError error) {
+        return new ApiError.FieldViolation(error.getField(), error.getDefaultMessage() == null ? "Invalid value" : error.getDefaultMessage());
+    }
+
+    private ResponseEntity<ApiError> build(HttpStatus status, String code, String message, HttpServletRequest request, List<ApiError.FieldViolation> violations) {
+        ApiError body = new ApiError(
+                Instant.now(),
+                status.value(),
+                status.getReasonPhrase(),
+                code,
+                message,
+                request.getRequestURI(),
+                violations
+        );
+        return ResponseEntity.status(status).body(body);
+    }
+}

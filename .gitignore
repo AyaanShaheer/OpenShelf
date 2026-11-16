@@ -1,0 +1,32 @@
+# General
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/playwright-report/
+frontend/test-results/
+frontend/.vite/
+
+# Backend
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+backend/.classpath
+backend/.project
+backend/.settings/
+
+# Misc
+/tmp/
