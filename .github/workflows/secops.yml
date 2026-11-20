@@ -150,28 +150,7 @@ jobs:
           elif [ "$rc" -eq 1 ]; then
             # Findings explicitly accepted in SECURITY-EXCEPTIONS.md are allowed;
             # any other HIGH/CRITICAL finding fails the scan.
-            python3 - <<'PY'
-import json, sys
-
-accepted = {
-    ("AWS-0104", "infra/terraform/foundation/main.tf"),
-}
-
-data = json.load(open("trivy-filesystem.sarif"))
-unexpected = []
-for run in data.get("runs", []):
-    for result in run.get("results", []) or []:
-        location = result["locations"][0]["physicalLocation"]
-        finding = (result["ruleId"], location["artifactLocation"]["uri"])
-        if finding not in accepted:
-            unexpected.append(finding)
-
-for rule_id, uri in sorted(unexpected):
-    print(f"UNEXPECTED FINDING: {rule_id} in {uri}")
-if unexpected:
-    sys.exit(1)
-print("Trivy filesystem scan: all findings are explicitly accepted (see SECURITY-EXCEPTIONS.md).")
-PY
+            python3 scripts/trivy-check-accepted.py trivy-filesystem.sarif
           else
             echo "Trivy filesystem scan failed with exit code $rc"
             exit "$rc"
