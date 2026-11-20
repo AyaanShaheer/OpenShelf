@@ -1,0 +1,308 @@
+name: OpenShelf SecOps
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: secops-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # --------------------------------------------------
+  # 1. Secret detection across the complete Git history
+  # --------------------------------------------------
+  secret-scan:
+    name: Secret Scanning
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout complete Git history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks scan
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # --------------------------------------------------
+  # 2. Pull-request dependency vulnerability review
+  # --------------------------------------------------
+  dependency-review:
+    name: Dependency Review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
+
+  # --------------------------------------------------
+  # 3. CodeQL static application security testing
+  # --------------------------------------------------
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: java-kotlin
+            build-mode: autobuild
+          - language: javascript-typescript
+            build-mode: none
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-extended
+
+      - name: Analyze source code
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
+
+  # --------------------------------------------------
+  # 4. Filesystem, secrets, dependency and IaC scanning
+  # --------------------------------------------------
+  trivy-filesystem:
+    name: Trivy Filesystem and IaC Scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Scan repository
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,misconfig,secret,license
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: sarif
+          output: trivy-filesystem.sarif
+          limit-severities-for-sarif: true
+
+      - name: Upload Trivy findings to GitHub Security
+        if: always() && hashFiles('trivy-filesystem.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-filesystem.sarif
+          category: trivy-filesystem
+
+  # --------------------------------------------------
+  # 5. Backend tests and build verification
+  # --------------------------------------------------
+  backend-ci:
+    name: Backend Build and Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Configure Java 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+
+      - name: Verify Maven project
+        run: mvn -B -ntp -f backend/pom.xml clean verify
+
+  # --------------------------------------------------
+  # 6. Frontend linting, tests and production build
+  # --------------------------------------------------
+  frontend-ci:
+    name: Frontend Build and Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Configure Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install locked dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Unit tests
+        working-directory: frontend
+        run: npm test
+
+      - name: Production build
+        working-directory: frontend
+        run: npm run build
+
+  # --------------------------------------------------
+  # 7. Build, scan container images and generate SBOMs
+  # --------------------------------------------------
+  container-security:
+    name: Container Security and SBOM
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    needs:
+      - backend-ci
+      - frontend-ci
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Build backend image
+        run: |
+          docker build --pull \
+            -f backend/Dockerfile \
+            -t openshelf-backend:${{ github.sha }} \
+            backend
+
+      - name: Build frontend image
+        run: |
+          docker build --pull \
+            --build-arg VITE_API_BASE_URL=/api/v1 \
+            -f frontend/Dockerfile \
+            -t openshelf-frontend:${{ github.sha }} \
+            frontend
+
+      - name: Prepare SBOM directory
+        run: mkdir -p sbom
+
+      - name: Generate backend CycloneDX SBOM
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: openshelf-backend:${{ github.sha }}
+          format: cyclonedx
+          output: sbom/backend.cdx.json
+          exit-code: "0"
+
+      - name: Generate frontend CycloneDX SBOM
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: openshelf-frontend:${{ github.sha }}
+          format: cyclonedx
+          output: sbom/frontend.cdx.json
+          exit-code: "0"
+          skip-setup-trivy: true
+
+      - name: Scan backend image
+        id: backend_scan
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: openshelf-backend:${{ github.sha }}
+          scan-type: image
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+          skip-setup-trivy: true
+
+      - name: Scan frontend image
+        id: frontend_scan
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: openshelf-frontend:${{ github.sha }}
+          scan-type: image
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+          skip-setup-trivy: true
+
+      - name: Upload CycloneDX SBOMs
+        uses: actions/upload-artifact@v6
+        with:
+          name: openshelf-sbom-${{ github.sha }}
+          path: sbom/*.cdx.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Enforce image vulnerability gate
+        if: always()
+        env:
+          BACKEND_SCAN: ${{ steps.backend_scan.outcome }}
+          FRONTEND_SCAN: ${{ steps.frontend_scan.outcome }}
+        run: |
+          echo "Backend scan: $BACKEND_SCAN"
+          echo "Frontend scan: $FRONTEND_SCAN"
+
+          if [ "$BACKEND_SCAN" != "success" ] || \
+             [ "$FRONTEND_SCAN" != "success" ]; then
+            echo "High or critical container findings detected, or scan failed."
+            exit 1
+          fi
+
+      - name: SBOM summary
+        if: always()
+        run: |
+          for file in sbom/*.cdx.json; do
+            [ -f "$file" ] || continue
+            echo "### $file" >> "$GITHUB_STEP_SUMMARY"
+            jq -r '"Components: \(.components | length)"' "$file" \
+              >> "$GITHUB_STEP_SUMMARY"
+          done
