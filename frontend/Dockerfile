@@ -23,6 +23,9 @@ RUN npm run build
 # -------------------------------
 FROM nginxinc/nginx-unprivileged:stable-alpine AS runtime
 
+USER root
+RUN apk update --no-cache
+
 COPY --from=build \
     --chown=nginx:nginx \
     /app/dist/ \

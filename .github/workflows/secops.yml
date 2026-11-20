@@ -1,3 +1,4 @@
+
 name: OpenShelf SecOps
 
 on:
@@ -60,9 +61,6 @@ jobs:
         with:
           fail-on-severity: high
 
-  # --------------------------------------------------
-  # 3. CodeQL static application security testing
-  # --------------------------------------------------
   codeql:
     name: CodeQL (${{ matrix.language }})
     runs-on: ubuntu-24.04
@@ -77,7 +75,7 @@ jobs:
       matrix:
         include:
           - language: java-kotlin
-            build-mode: autobuild
+            build-mode: manual
           - language: javascript-typescript
             build-mode: none
 
@@ -85,12 +83,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Configure Java 21
+        if: matrix.language == 'java-kotlin'
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
           queries: security-extended
+
+      - name: Build backend for CodeQL
+        if: matrix.language == 'java-kotlin'
+        run: mvn -B -ntp -f backend/pom.xml -DskipTests clean package
 
       - name: Analyze source code
         uses: github/codeql-action/analyze@v4
