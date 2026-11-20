@@ -18,6 +18,11 @@ import sys
 # SECURITY-EXCEPTIONS.md.
 ACCEPTED = {
     ("AWS-0104", "infra/terraform/foundation/main.tf"),
+    # Fixed in Spring Framework 7.0.9, which removed theme APIs (ThemeResolver) and is
+    # only compatible with Spring Boot 4; the application runs on Spring Boot 3.5.16
+    # (the supported 3.5 line — see SECURITY-EXCEPTIONS.md).
+    ("CVE-2026-47884", "backend/pom.xml"),
+    ("CVE-2026-47890", "backend/pom.xml"),
 }
 
 

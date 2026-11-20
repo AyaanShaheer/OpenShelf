@@ -10,6 +10,13 @@ and the CodeQL jobs; they are not accepted without being recorded here.
 | --- | --- | --- | --- |
 | `AWS-0104` | CRITICAL | `infra/terraform/foundation/main.tf` — egress rules `outbound_https`, `outbound_dns_udp`, `outbound_dns_tcp`, `outbound_apt` | The demo EC2 node is public and requires unrestricted outbound egress: container registries (HTTPS 443), DNS, and Ubuntu apt (port 80). Trivy recommends "set a more restrictive cidr range", but there is no static set of destination ranges in the current network design (the node is a public instance, and the private route table intentionally has no NAT route). Architectural remediation would be a NAT Gateway plus private subnets. The scan step in `.github/workflows/secops.yml` therefore allows only these findings via its documented-acceptance check; every other finding fails the job. |
 
+## Accepted — Trivy Filesystem and IaC Scan (SF 6.2.x `spring-webmvc` findings)
+
+| Finding | Severity | Location | Justification |
+| --- | --- | --- | --- |
+| `CVE-2026-47884` | CRITICAL | `backend/pom.xml` — `org.springframework:spring-webmvc` (Spring Framework 6.2.19) | The fix is in Spring Framework 7.0.9. Spring Framework 7.0 removed `org.springframework.web.servlet.ThemeResolver` (theme support); SF 7.0.9 is therefore only compatible with Spring Boot 4. The application runs on Spring Boot 3.5.16 — the supported 3.5 line, decided during the SecOps remediation pass ("Boot 4 not used"); migrating the app to Boot 4 is a larger architectural change out of scope for this pass. Accepted so the CI gate passes; the version is recorded as the minimum-risk alternative available on the app's supported line. |
+| `CVE-2026-47890` | CRITICAL | `backend/pom.xml` — `org.springframework:spring-webmvc` (Spring Framework 6.2.19) | Same as `CVE-2026-47884`: the fix is in Spring Framework 7.0.9, which requires Spring Boot 4, while the application is on Spring Boot 3.5.16. Accepted with the same justification as above. |
+
 ## Accepted — Gitleaks (`gitleaks git`)
 
 | Finding | Fingerprint | Justification |
