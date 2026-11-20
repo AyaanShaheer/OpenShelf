@@ -1,0 +1,7 @@
+- name: Configure OpenShelf Linux baseline
+  hosts: openshelf
+  become: true
+  gather_facts: true
+
+  roles:
+    - base

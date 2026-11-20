@@ -1,0 +1,81 @@
+---
+- name: Deploy OpenShelf PostgreSQL
+  hosts: openshelf
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Create secrets directory
+      ansible.builtin.file:
+        path: /etc/openshelf/secrets
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Generate database credentials if absent
+      ansible.builtin.shell: |
+        set -eu
+
+        if [ ! -s /etc/openshelf/secrets/postgres.env ]; then
+          printf 'POSTGRES_DB=openshelf\nPOSTGRES_USER=openshelf\nPOSTGRES_PASSWORD=%s\n' \
+            "$(openssl rand -hex 32)" \
+            > /etc/openshelf/secrets/postgres.env
+
+          chmod 0600 /etc/openshelf/secrets/postgres.env
+        fi
+      args:
+        creates: /etc/openshelf/secrets/postgres.env
+      no_log: true
+
+    - name: Ensure database credentials permissions
+      ansible.builtin.file:
+        path: /etc/openshelf/secrets/postgres.env
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Create deployment directory
+      ansible.builtin.file:
+        path: /opt/openshelf/deploy
+        state: directory
+        owner: root
+        group: root
+        mode: "0750"
+
+    - name: Copy PostgreSQL Compose configuration
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../compose/postgres.compose.yaml"
+        dest: /opt/openshelf/deploy/postgres.compose.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Start PostgreSQL container
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - -f
+          - /opt/openshelf/deploy/postgres.compose.yaml
+          - up
+          - -d
+      register: postgres_deployment
+      changed_when: "'Started' in postgres_deployment.stdout or 'Created' in postgres_deployment.stdout"
+
+    - name: Wait for PostgreSQL readiness
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - openshelf-postgres
+          - pg_isready
+          - -U
+          - openshelf
+          - -d
+          - openshelf
+      register: postgres_health
+      retries: 20
+      delay: 5
+      until: postgres_health.rc == 0
+      changed_when: false

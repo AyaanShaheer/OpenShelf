@@ -1,0 +1,137 @@
+---
+- name: Install K3s system dependencies
+  ansible.builtin.apt:
+    name:
+      - curl
+      - ca-certificates
+      - iptables
+      - iptables-persistent
+      - socat
+      - conntrack
+      - ipset
+      - util-linux
+    state: present
+    update_cache: true
+
+- name: Persist required kernel modules
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/k3s.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      overlay
+      br_netfilter
+
+- name: Load overlay kernel module
+  ansible.builtin.command:
+    cmd: modprobe overlay
+  changed_when: false
+
+- name: Load br_netfilter kernel module
+  ansible.builtin.command:
+    cmd: modprobe br_netfilter
+  changed_when: false
+
+- name: Configure Kubernetes networking sysctl parameters
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/99-k3s.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      net.bridge.bridge-nf-call-iptables = 1
+      net.bridge.bridge-nf-call-ip6tables = 1
+      net.ipv4.ip_forward = 1
+
+- name: Apply kernel networking parameters
+  ansible.builtin.command:
+    cmd: sysctl --system
+  changed_when: false
+
+- name: Create K3s configuration directory
+  ansible.builtin.file:
+    path: /etc/rancher/k3s
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Configure K3s server
+  ansible.builtin.copy:
+    dest: /etc/rancher/k3s/config.yaml
+    owner: root
+    group: root
+    mode: "0600"
+    content: |
+      node-name: openshelf-node
+      write-kubeconfig-mode: "0600"
+      disable:
+        - traefik
+
+- name: Download official K3s installer
+  ansible.builtin.get_url:
+    url: https://get.k3s.io
+    dest: /tmp/k3s-install.sh
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install pinned K3s release
+  ansible.builtin.command:
+    cmd: sh /tmp/k3s-install.sh server
+    creates: /usr/local/bin/k3s
+  environment:
+    INSTALL_K3S_VERSION: "v1.36.6+k3s1"
+
+- name: Enable and start K3s service
+  ansible.builtin.systemd:
+    name: k3s
+    enabled: true
+    state: started
+
+- name: Wait for Kubernetes node to become Ready
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - wait
+      - --for=condition=Ready
+      - node/openshelf-node
+      - --timeout=180s
+  register: k3s_node_ready
+  changed_when: false
+
+- name: Retrieve Kubernetes node information
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - get
+      - nodes
+      - -o
+      - wide
+  register: k3s_nodes
+  changed_when: false
+
+- name: Display Kubernetes node information
+  ansible.builtin.debug:
+    var: k3s_nodes.stdout_lines
+
+- name: Retrieve Kubernetes system pods
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - get
+      - pods
+      - -n
+      - kube-system
+      - -o
+      - wide
+  register: k3s_system_pods
+  changed_when: false
+
+- name: Display Kubernetes system pods
+  ansible.builtin.debug:
+    var: k3s_system_pods.stdout_lines

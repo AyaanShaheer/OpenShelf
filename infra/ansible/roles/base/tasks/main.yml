@@ -1,0 +1,77 @@
+- name: Verify operating system
+  ansible.builtin.assert:
+    that:
+      - ansible_distribution == "Ubuntu"
+      - ansible_distribution_major_version == "24"
+    fail_msg: "OpenShelf requires Ubuntu 24.04."
+
+- name: Set hostname
+  ansible.builtin.hostname:
+    name: openshelf-node
+
+- name: Check current timezone
+  ansible.builtin.command:
+    cmd: timedatectl show -p Timezone --value
+  register: current_timezone
+  changed_when: false
+
+- name: Set timezone to UTC
+  ansible.builtin.command:
+    cmd: timedatectl set-timezone UTC
+  when: current_timezone.stdout != "UTC"
+
+- name: Update APT package cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Upgrade installed packages
+  ansible.builtin.apt:
+    upgrade: safe
+
+- name: Install operational utilities
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - wget
+      - git
+      - unzip
+      - jq
+      - vim-tiny
+      - htop
+      - tree
+      - net-tools
+      - dnsutils
+      - sysstat
+      - chrony
+      - python3
+      - python3-apt
+      - unattended-upgrades
+    state: present
+
+- name: Ensure chrony is running
+  ansible.builtin.systemd:
+    name: chrony
+    enabled: true
+    state: started
+
+- name: Create OpenShelf operational directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  loop:
+    - /opt/openshelf
+    - /opt/openshelf/deploy
+    - /opt/openshelf/config
+    - /opt/openshelf/logs
+    - /opt/openshelf/backups
+
+- name: Ensure SSM Agent is running
+  ansible.builtin.systemd:
+    name: snap.amazon-ssm-agent.amazon-ssm-agent.service
+    enabled: true
+    state: started

@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openshelf-backend
+  namespace: openshelf
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: openshelf-backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: openshelf-backend
+        app.kubernetes.io/part-of: openshelf
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: backend
+          image: openshelf-backend:0.1.0
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: openshelf-backend-secret
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: prod
+            - name: SERVER_PORT
+              value: "8080"
+            - name: DB_HOST
+              value: openshelf-postgres
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: openshelf
+            - name: DB_USER
+              value: openshelf
+            - name: SOLR_BASE_URL
+              value: http://openshelf-solr:8983/solr
+            - name: SOLR_COLLECTION
+              value: openshelf
+            - name: CORS_ALLOWED_ORIGINS
+              value: http://13.206.101.40
+            - name: BOOTSTRAP_ADMIN_ENABLED
+              value: "false"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 768Mi
+            limits:
+              cpu: "1"
+              memory: 1536Mi
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            periodSeconds: 20
+            timeoutSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openshelf-backend
+  namespace: openshelf
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: openshelf-backend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

@@ -1,0 +1,125 @@
+---
+- name: Deploy OpenShelf Spring Boot backend
+  hosts: openshelf
+  become: true
+  gather_facts: false
+
+  tasks:
+
+    - name: Verify backend image exists
+      ansible.builtin.command:
+        argv:
+          - docker
+          - image
+          - inspect
+          - openshelf-backend:0.1.0
+      changed_when: false
+
+    - name: Verify PostgreSQL is ready
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - openshelf-postgres
+          - pg_isready
+          - -U
+          - openshelf
+          - -d
+          - openshelf
+      changed_when: false
+
+    - name: Verify Solr is ready
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - openshelf-solr
+          - curl
+          - -fsS
+          - http://localhost:8983/solr/openshelf/admin/ping?wt=json
+      changed_when: false
+    - name: Generate backend runtime environment
+      ansible.builtin.shell: |
+        set -eu
+
+        ENV_FILE=/etc/openshelf/secrets/backend.env
+
+        if [ ! -s "$ENV_FILE" ]; then
+          set -a
+          . /etc/openshelf/secrets/postgres.env
+          set +a
+
+          test -n "${POSTGRES_PASSWORD:-}"
+
+          JWT_SECRET=$(openssl rand -hex 48)
+
+          umask 077
+
+          {
+            printf 'SPRING_PROFILES_ACTIVE=prod\n'
+            printf 'SERVER_PORT=8080\n'
+            printf 'DB_HOST=openshelf-postgres\n'
+            printf 'DB_PORT=5432\n'
+            printf 'DB_NAME=%s\n' "$POSTGRES_DB"
+            printf 'DB_USER=%s\n' "$POSTGRES_USER"
+            printf 'DB_PASSWORD=%s\n' "$POSTGRES_PASSWORD"
+            printf 'SOLR_BASE_URL=http://openshelf-solr:8983/solr\n'
+            printf 'SOLR_COLLECTION=openshelf\n'
+            printf 'JWT_SECRET=%s\n' "$JWT_SECRET"
+            printf 'JWT_EXPIRATION_MS=3600000\n'
+            printf 'CORS_ALLOWED_ORIGINS=http://localhost:5173\n'
+            printf 'MAX_UPLOAD_SIZE_MB=10\n'
+            printf 'BOOTSTRAP_ADMIN_ENABLED=false\n'
+          } > "$ENV_FILE"
+        fi
+
+        chmod 0600 "$ENV_FILE"
+      args:
+        executable: /bin/bash
+      no_log: true
+
+    - name: Copy backend Compose configuration
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../compose/backend.compose.yaml"
+        dest: /opt/openshelf/deploy/backend.compose.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Start backend container
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - -f
+          - /opt/openshelf/deploy/backend.compose.yaml
+          - up
+          - -d
+      register: backend_deployment
+      changed_when: >
+        'Started' in backend_deployment.stdout or
+        'Created' in backend_deployment.stdout or
+        'Recreated' in backend_deployment.stdout
+
+    - name: Wait for backend port
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 18080
+        timeout: 180
+        delay: 5
+
+    - name: Verify Spring Boot readiness
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/actuator/health/readiness
+        method: GET
+        status_code: 200
+        return_content: true
+      register: backend_health
+      retries: 12
+      delay: 5
+      until: backend_health.status | default(0) == 200
+      changed_when: false
+
+    - name: Display backend health
+      ansible.builtin.debug:
+        msg: "Backend readiness: {{ backend_health.json.status | default('UP') }}"

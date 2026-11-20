@@ -1,0 +1,108 @@
+---
+- name: Build OpenShelf frontend Docker image
+  hosts: openshelf
+  become: true
+  gather_facts: false
+
+  vars:
+    repository_url: "https://github.com/AyaanShaheer/OpenShelf.git"
+    application_directory: "/opt/openshelf/source"
+    image_name: "openshelf-frontend"
+    image_tag: "0.1.0"
+
+  tasks:
+
+    - name: Update application source from GitHub
+      ansible.builtin.git:
+        repo: "{{ repository_url }}"
+        dest: "{{ application_directory }}"
+        version: main
+        update: true
+        force: true
+        depth: 1
+
+    - name: Verify frontend Dockerfile
+      ansible.builtin.stat:
+        path: "{{ application_directory }}/frontend/Dockerfile"
+      register: frontend_dockerfile
+
+    - name: Verify frontend package lock
+      ansible.builtin.stat:
+        path: "{{ application_directory }}/frontend/package-lock.json"
+      register: frontend_lock
+
+    - name: Validate frontend build inputs
+      ansible.builtin.assert:
+        that:
+          - frontend_dockerfile.stat.exists
+          - frontend_lock.stat.exists
+        fail_msg: "Frontend Docker build inputs are missing."
+
+    - name: Build frontend Docker image
+      ansible.builtin.command:
+        argv:
+          - docker
+          - build
+          - --pull
+          - --progress=plain
+          - --build-arg
+          - VITE_API_BASE_URL=/api/v1
+          - --tag
+          - "{{ image_name }}:{{ image_tag }}"
+          - --file
+          - frontend/Dockerfile
+          - frontend
+        chdir: "{{ application_directory }}"
+      async: 1800
+      poll: 15
+      register: frontend_build
+
+    - name: Verify frontend image exists
+      ansible.builtin.command:
+        argv:
+          - docker
+          - image
+          - inspect
+          - "{{ image_name }}:{{ image_tag }}"
+      changed_when: false
+
+    - name: Verify Nginx configuration
+      ansible.builtin.command:
+        argv:
+          - docker
+          - run
+          - --rm
+          - --network
+          - openshelf-net
+          - --entrypoint
+          - nginx
+          - "{{ image_name }}:{{ image_tag }}"
+          - -t
+      changed_when: false
+
+    - name: Verify frontend index.html
+      ansible.builtin.command:
+        argv:
+          - docker
+          - run
+          - --rm
+          - --entrypoint
+          - sh
+          - "{{ image_name }}:{{ image_tag }}"
+          - -c
+          - "test -s /usr/share/nginx/html/index.html"
+      changed_when: false
+
+    - name: Display frontend image details
+      ansible.builtin.command:
+        argv:
+          - docker
+          - image
+          - ls
+          - "{{ image_name }}:{{ image_tag }}"
+      register: frontend_image
+      changed_when: false
+
+    - name: Show image information
+      ansible.builtin.debug:
+        var: frontend_image.stdout_lines

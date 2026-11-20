@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: openshelf-postgres-data
+  namespace: openshelf
+  labels:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/part-of: openshelf
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: openshelf-local-retain
+  resources:
+    requests:
+      storage: 10Gi

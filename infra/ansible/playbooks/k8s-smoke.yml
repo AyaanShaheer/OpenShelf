@@ -1,0 +1,95 @@
+---
+- name: Deploy Kubernetes smoke-test workload
+  hosts: openshelf
+  become: true
+  gather_facts: false
+
+  tasks:
+
+    - name: Copy Nginx Kubernetes manifest
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../kubernetes/smoke/nginx.yaml"
+        dest: /opt/openshelf/kubernetes/nginx.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Apply Kubernetes manifest
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/k3s
+          - kubectl
+          - apply
+          - -f
+          - /opt/openshelf/kubernetes/nginx.yaml
+      register: deployment_result
+      changed_when: >
+        'created' in deployment_result.stdout or
+        'configured' in deployment_result.stdout
+
+    - name: Wait for Nginx deployment availability
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/k3s
+          - kubectl
+          - wait
+          - --for=condition=Available
+          - deployment/openshelf-smoke-nginx
+          - -n
+          - openshelf
+          - --timeout=180s
+      changed_when: false
+
+    - name: Retrieve Nginx pods
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/k3s
+          - kubectl
+          - get
+          - pods
+          - -n
+          - openshelf
+          - -l
+          - app.kubernetes.io/name=openshelf-smoke-nginx
+          - -o
+          - wide
+      register: nginx_pods
+      changed_when: false
+
+    - name: Retrieve Kubernetes service
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/k3s
+          - kubectl
+          - get
+          - svc
+          - openshelf-smoke-nginx
+          - -n
+          - openshelf
+      register: nginx_service
+      changed_when: false
+
+    - name: Verify service endpoints
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/k3s
+          - kubectl
+          - get
+          - endpoints
+          - openshelf-smoke-nginx
+          - -n
+          - openshelf
+      register: nginx_endpoints
+      changed_when: false
+
+    - name: Display Nginx pods
+      ansible.builtin.debug:
+        var: nginx_pods.stdout_lines
+
+    - name: Display service
+      ansible.builtin.debug:
+        var: nginx_service.stdout_lines
+
+    - name: Display service endpoints
+      ansible.builtin.debug:
+        var: nginx_endpoints.stdout_lines

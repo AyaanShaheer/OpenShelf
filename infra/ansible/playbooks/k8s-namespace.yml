@@ -1,0 +1,62 @@
+---
+- name: Configure OpenShelf Kubernetes namespace
+  hosts: openshelf
+  become: true
+  gather_facts: false
+
+  tasks:
+
+    - name: Create Kubernetes manifest directory
+      ansible.builtin.file:
+        path: /opt/openshelf/kubernetes/namespaces
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Copy OpenShelf namespace manifest
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../kubernetes/namespaces/openshelf.yaml"
+        dest: /opt/openshelf/kubernetes/namespaces/openshelf.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Apply OpenShelf namespace configuration
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/k3s
+          - kubectl
+          - apply
+          - -f
+          - /opt/openshelf/kubernetes/namespaces/openshelf.yaml
+      register: namespace_apply
+      changed_when: >
+        'created' in namespace_apply.stdout or
+        'configured' in namespace_apply.stdout
+
+    - name: Verify namespace
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/k3s
+          - kubectl
+          - get
+          - namespace
+          - openshelf
+      changed_when: false
+
+    - name: Verify resource quota
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/k3s
+          - kubectl
+          - get
+          - resourcequota
+          - -n
+          - openshelf
+      changed_when: false
+      register: quota_result
+
+    - name: Display resource quota
+      ansible.builtin.debug:
+        var: quota_result.stdout_lines

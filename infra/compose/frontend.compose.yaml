@@ -1,0 +1,26 @@
+services:
+  frontend:
+    image: openshelf-frontend:0.1.0
+    container_name: openshelf-frontend
+    restart: unless-stopped
+    init: true
+
+    ports:
+      - "80:8080"
+
+    networks:
+      - openshelf
+
+    security_opt:
+      - no-new-privileges:true
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  openshelf:
+    external: true
+    name: openshelf-net

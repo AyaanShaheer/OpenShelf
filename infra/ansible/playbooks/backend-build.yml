@@ -1,0 +1,93 @@
+---
+- name: Build OpenShelf backend Docker image
+  hosts: openshelf
+  become: true
+  gather_facts: false
+
+  vars:
+    repository_url: "https://github.com/AyaanShaheer/OpenShelf.git"
+    application_directory: "/opt/openshelf/source"
+    image_name: "openshelf-backend"
+    image_tag: "0.1.0"
+
+  tasks:
+
+    - name: Clone OpenShelf repository
+      ansible.builtin.git:
+        repo: "{{ repository_url }}"
+        dest: "{{ application_directory }}"
+        version: main
+        depth: 1
+        force: true
+
+    - name: Verify backend Dockerfile exists
+      ansible.builtin.stat:
+        path: "{{ application_directory }}/backend/Dockerfile"
+      register: backend_dockerfile
+
+    - name: Assert Dockerfile exists
+      ansible.builtin.assert:
+        that:
+          - backend_dockerfile.stat.exists
+        fail_msg: "Backend Dockerfile not found."
+
+    - name: Build backend Docker image
+      ansible.builtin.command:
+        argv:
+          - docker
+          - build
+          - --pull
+          - --progress=plain
+          - --tag
+          - "{{ image_name }}:{{ image_tag }}"
+          - --file
+          - backend/Dockerfile
+          - backend
+        chdir: "{{ application_directory }}"
+      async: 3600
+      poll: 15
+      register: backend_build
+
+    - name: Display build result
+      ansible.builtin.debug:
+        msg: "Backend Docker image built successfully."
+
+    - name: Verify image exists
+      ansible.builtin.command:
+        argv:
+          - docker
+          - image
+          - inspect
+          - "{{ image_name }}:{{ image_tag }}"
+      changed_when: false
+
+    - name: Display built image
+      ansible.builtin.command:
+        argv:
+          - docker
+          - image
+          - ls
+          - "{{ image_name }}:{{ image_tag }}"
+      register: image_information
+      changed_when: false
+
+    - name: Show image information
+      ansible.builtin.debug:
+        var: image_information.stdout_lines
+
+    - name: Verify Java runtime inside container
+      ansible.builtin.command:
+        argv:
+          - docker
+          - run
+          - --rm
+          - --entrypoint
+          - java
+          - "{{ image_name }}:{{ image_tag }}"
+          - -version
+      register: java_runtime
+      changed_when: false
+
+    - name: Display Java runtime
+      ansible.builtin.debug:
+        var: java_runtime.stderr_lines

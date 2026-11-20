@@ -1,0 +1,76 @@
+---
+- name: Deploy OpenShelf Apache Solr
+  hosts: openshelf
+  become: true
+  gather_facts: false
+
+  tasks:
+
+    - name: Ensure Solr configuration directory exists
+      ansible.builtin.file:
+        path: /opt/openshelf/solr-config/openshelf
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Copy OpenShelf Solr configset
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../../solr/openshelf/"
+        dest: /opt/openshelf/solr-config/openshelf/
+        owner: root
+        group: root
+        mode: "0644"
+        directory_mode: "0755"
+
+    - name: Verify existing Docker network
+      ansible.builtin.command:
+        argv:
+          - docker
+          - network
+          - inspect
+          - openshelf-net
+      register: docker_network
+      changed_when: false
+
+    - name: Copy Solr Compose configuration
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../compose/solr.compose.yaml"
+        dest: /opt/openshelf/deploy/solr.compose.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Start Solr
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - -f
+          - /opt/openshelf/deploy/solr.compose.yaml
+          - up
+          - -d
+      register: solr_deployment
+      changed_when: >
+        'Started' in solr_deployment.stdout or
+        'Created' in solr_deployment.stdout or
+        'Recreated' in solr_deployment.stdout
+
+    - name: Wait for Solr core readiness
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - openshelf-solr
+          - curl
+          - -fsS
+          - http://localhost:8983/solr/openshelf/admin/ping?wt=json
+      register: solr_health
+      retries: 30
+      delay: 5
+      until: solr_health.rc == 0
+      changed_when: false
+
+    - name: Display Solr health response
+      ansible.builtin.debug:
+        var: solr_health.stdout

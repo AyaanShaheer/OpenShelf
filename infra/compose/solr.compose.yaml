@@ -1,0 +1,41 @@
+services:
+  solr:
+    image: solr:9.7.0
+    container_name: openshelf-solr
+    restart: unless-stopped
+
+    command:
+      - solr-precreate
+      - openshelf
+      - /opt/solr/server/solr/configsets/openshelf
+
+    environment:
+      SOLR_HEAP: "2g"
+
+    volumes:
+      - openshelf-solr-data:/var/solr
+      - /opt/openshelf/solr-config/openshelf:/opt/solr/server/solr/configsets/openshelf:ro
+
+    networks:
+      - openshelf
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "curl -fsS 'http://localhost:8983/solr/openshelf/admin/ping?wt=json' >/dev/null"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  openshelf-solr-data:
+    name: openshelf-solr-data
+
+networks:
+  openshelf:
+    external: true
+    name: openshelf-net

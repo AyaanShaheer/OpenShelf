@@ -1,0 +1,105 @@
+---
+- name: Deploy OpenShelf frontend
+  hosts: openshelf
+  become: true
+  gather_facts: false
+
+  vars:
+    frontend_origin: "http://13.127.133.145"
+
+  tasks:
+
+    - name: Configure backend CORS origin
+      ansible.builtin.lineinfile:
+        path: /etc/openshelf/secrets/backend.env
+        regexp: '^CORS_ALLOWED_ORIGINS='
+        line: "CORS_ALLOWED_ORIGINS={{ frontend_origin }}"
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+    - name: Recreate backend with updated environment
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - -f
+          - /opt/openshelf/deploy/backend.compose.yaml
+          - up
+          - -d
+          - --force-recreate
+          - backend
+
+    - name: Wait for backend readiness
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/actuator/health/readiness
+        status_code: 200
+      register: backend_health
+      retries: 24
+      delay: 5
+      until: backend_health.status | default(0) == 200
+      changed_when: false
+
+    - name: Copy frontend Compose configuration
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../compose/frontend.compose.yaml"
+        dest: /opt/openshelf/deploy/frontend.compose.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Validate frontend Compose configuration
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - -f
+          - /opt/openshelf/deploy/frontend.compose.yaml
+          - config
+          - --quiet
+      changed_when: false
+
+    - name: Start frontend container
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - -f
+          - /opt/openshelf/deploy/frontend.compose.yaml
+          - up
+          - -d
+      register: frontend_deployment
+      changed_when: >
+        'Started' in frontend_deployment.stdout or
+        'Created' in frontend_deployment.stdout or
+        'Recreated' in frontend_deployment.stdout
+
+    - name: Wait for Nginx
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 80
+        timeout: 60
+
+    - name: Verify public frontend response
+      ansible.builtin.uri:
+        url: http://127.0.0.1/
+        status_code: 200
+        return_content: true
+      register: frontend_response
+      changed_when: false
+
+    - name: Verify public catalogue API through Nginx
+      ansible.builtin.uri:
+        url: http://127.0.0.1/api/v1/catalogue
+        status_code: 200
+        return_content: false
+      register: catalogue_response
+      changed_when: false
+
+    - name: Display deployment verification
+      ansible.builtin.debug:
+        msg:
+          - "Frontend HTTP status: {{ frontend_response.status }}"
+          - "Catalogue API HTTP status: {{ catalogue_response.status }}"
+          - "Backend readiness: {{ backend_health.json.status | default('UP') }}"

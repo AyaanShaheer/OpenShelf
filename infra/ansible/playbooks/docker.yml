@@ -1,0 +1,8 @@
+---
+- name: Install and configure Docker Engine
+  hosts: openshelf
+  become: true
+  gather_facts: true
+
+  roles:
+    - docker

@@ -1,0 +1,29 @@
+services:
+  backend:
+    image: openshelf-backend:0.1.0
+    container_name: openshelf-backend
+    restart: unless-stopped
+    init: true
+
+    env_file:
+      - /etc/openshelf/secrets/backend.env
+
+    ports:
+      - "127.0.0.1:18080:8080"
+
+    networks:
+      - openshelf
+
+    security_opt:
+      - no-new-privileges:true
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  openshelf:
+    external: true
+    name: openshelf-net

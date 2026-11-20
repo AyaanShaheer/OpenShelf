@@ -30,3 +30,14 @@ backend/.settings/
 
 # Misc
 /tmp/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+*.tfvars
+# Deployment-specific Ansible inventory
+infra/ansible/inventory/hosts.ini
