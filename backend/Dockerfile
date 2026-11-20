@@ -21,7 +21,7 @@ RUN mvn -B -ntp clean verify
 # ------------------------------------------
 # Stage 2: Production runtime
 # ------------------------------------------
-FROM eclipse-temurin:21.0.13_9-jre-noble AS runtime
+FROM eclipse-temurin:24.0.2_12-jre-noble AS runtime
 
 WORKDIR /app
 
