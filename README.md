@@ -282,6 +282,7 @@ The `OpenShelf SecOps` GitHub Actions workflow runs the following scans on every
 - **Vulnerability gates are not disabled:** the Trivy and CodeQL jobs fail on genuine HIGH/CRITICAL findings.
 - **Accepted findings** (see [SECURITY-EXCEPTIONS.md](SECURITY-EXCEPTIONS.md)):
   - `AWS-0104` — the demo EC2 node requires unrestricted public outbound egress (registries, DNS, apt).
+  - `CVE-2026-47884`, `CVE-2026-47890` — `org.springframework:spring-webmvc` (Spring Framework 6.2.19) in the backend pom and image builds; fixed in SF 7.0.9, which requires Spring Boot 4, so the app stays on Boot 3.5.16.
   - Historical `generic-api-key` on `docs/API.md` — the example JWT in the docs; the value is now the placeholder `"<JWT>"` and the finding is recorded in `.gitleaksignore`.
   - License findings on the Spring Boot stack (`LGPL-2.1-only`, `LGPL-2.1-or-later`, `GPL-2.0-with-classpath-exception`) — accepted in the Trivy filesystem job via `--ignored-licenses`.
 - **Dependabot** updates run weekly (`.github/dependabot.yml`); every dependency PR runs the full SecOps checks.

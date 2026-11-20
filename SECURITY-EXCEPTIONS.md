@@ -17,6 +17,8 @@ and the CodeQL jobs; they are not accepted without being recorded here.
 | `CVE-2026-47884` | CRITICAL | `backend/pom.xml` — `org.springframework:spring-webmvc` (Spring Framework 6.2.19) | The fix is in Spring Framework 7.0.9. Spring Framework 7.0 removed `org.springframework.web.servlet.ThemeResolver` (theme support); SF 7.0.9 is therefore only compatible with Spring Boot 4. The application runs on Spring Boot 3.5.16 — the supported 3.5 line, decided during the SecOps remediation pass ("Boot 4 not used"); migrating the app to Boot 4 is a larger architectural change out of scope for this pass. Accepted so the CI gate passes; the version is recorded as the minimum-risk alternative available on the app's supported line. |
 | `CVE-2026-47890` | CRITICAL | `backend/pom.xml` — `org.springframework:spring-webmvc` (Spring Framework 6.2.19) | Same as `CVE-2026-47884`: the fix is in Spring Framework 7.0.9, which requires Spring Boot 4, while the application is on Spring Boot 3.5.16. Accepted with the same justification as above. |
 
+The same two findings are also reported for the `openshelf-backend` image builds (`app.jar`). The CI image vulnerability gate has no acceptance mechanism for image findings, so clearing them requires the architectural change described above.
+
 ## Accepted — Gitleaks (`gitleaks git`)
 
 | Finding | Fingerprint | Justification |

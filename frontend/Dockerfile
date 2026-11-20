@@ -21,7 +21,7 @@ RUN npm run build
 # -------------------------------
 # Stage 2: Nginx runtime
 # -------------------------------
-FROM nginxinc/nginx-unprivileged:stable-alpine AS runtime
+FROM nginxinc/nginx-unprivileged:1.31.0-alpine AS runtime
 
 USER root
 RUN apk upgrade --no-cache
