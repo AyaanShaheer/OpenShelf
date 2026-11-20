@@ -14,6 +14,12 @@ spec:
         app.kubernetes.io/name: openshelf-frontend
         app.kubernetes.io/part-of: openshelf
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: frontend
           image: openshelf-frontend:0.1.0
@@ -21,7 +27,6 @@ spec:
           ports:
             - name: http
               containerPort: 8080
-              hostPort: 80
           resources:
             requests:
               cpu: 100m
@@ -36,6 +41,17 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: nginx-logs
+              mountPath: /var/log/nginx
+            - name: nginx-run
+              mountPath: /tmp
+      volumes:
+        - name: nginx-logs
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
           readinessProbe:
             httpGet:
               path: /

@@ -24,6 +24,11 @@ spec:
     spec:
       terminationGracePeriodSeconds: 20
 
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+
       containers:
         - name: nginx
           image: nginx:1.31.9-alpine3.24-slim
@@ -41,6 +46,20 @@ spec:
             limits:
               cpu: 250m
               memory: 128Mi
+
+          securityContext:
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: nginx-logs
+              mountPath: /var/log/nginx
+            - name: nginx-run
+              mountPath: /tmp
+
+      volumes:
+        - name: nginx-logs
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
 
           readinessProbe:
             httpGet:

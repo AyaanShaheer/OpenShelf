@@ -48,6 +48,11 @@ spec:
     spec:
       terminationGracePeriodSeconds: 60
       securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
         fsGroup: 999
         fsGroupChangePolicy: OnRootMismatch
       containers:
@@ -94,10 +99,16 @@ spec:
                 - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
             periodSeconds: 20
             timeoutSeconds: 5
+          securityContext:
+            readOnlyRootFilesystem: true
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data
+            - name: postgres-run
+              mountPath: /var/run/postgresql
       volumes:
         - name: postgres-data
           persistentVolumeClaim:
             claimName: openshelf-postgres-data
+        - name: postgres-run
+          emptyDir: {}

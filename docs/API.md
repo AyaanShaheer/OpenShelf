@@ -47,7 +47,7 @@ Response `data`:
 
 ```json
 {
-  "token": "eyJhbGciOiJIUzM4NCJ9...",
+  "token": "<JWT>",
   "tokenType": "Bearer",
   "expiresInMs": 3600000,
   "user": { "id": 1, "fullName": "System Administrator", "email": "admin@example.edu", "role": "ADMIN" }

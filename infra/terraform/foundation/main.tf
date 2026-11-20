@@ -160,11 +160,41 @@ resource "aws_vpc_security_group_ingress_rule" "https" {
   description       = "Public HTTPS"
 }
 
-# Outbound traffic
+# Outbound traffic: restricted to what the node actually needs
+# (public HTTPS to container registries, DNS, and apt for the Ubuntu bootstrap).
 
-resource "aws_vpc_security_group_egress_rule" "outbound" {
+resource "aws_vpc_security_group_egress_rule" "outbound_https" {
   security_group_id = aws_security_group.openshelf_node.id
   cidr_ipv4         = "0.0.0.0/0"
-  ip_protocol       = "-1"
-  description       = "Outbound IPv4 traffic"
+  from_port         = 443
+  to_port           = 443
+  ip_protocol       = "tcp"
+  description       = "Outbound HTTPS to public registries"
+}
+
+resource "aws_vpc_security_group_egress_rule" "outbound_dns_udp" {
+  security_group_id = aws_security_group.openshelf_node.id
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 53
+  to_port           = 53
+  ip_protocol       = "udp"
+  description       = "Outbound DNS (UDP)"
+}
+
+resource "aws_vpc_security_group_egress_rule" "outbound_dns_tcp" {
+  security_group_id = aws_security_group.openshelf_node.id
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 53
+  to_port           = 53
+  ip_protocol       = "tcp"
+  description       = "Outbound DNS (TCP)"
+}
+
+resource "aws_vpc_security_group_egress_rule" "outbound_apt" {
+  security_group_id = aws_security_group.openshelf_node.id
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 80
+  to_port           = 80
+  ip_protocol       = "tcp"
+  description       = "Outbound HTTP for Ubuntu bootstrap (apt)"
 }

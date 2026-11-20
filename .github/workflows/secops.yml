@@ -112,7 +112,7 @@ jobs:
   trivy-filesystem:
     name: Trivy Filesystem and IaC Scan
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 30
     permissions:
       contents: read
       security-events: write
@@ -121,18 +121,61 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Install pinned Trivy
+        run: |
+          curl -fsSL -o /tmp/trivy.tar.gz \
+            https://github.com/aquasecurity/trivy/releases/download/v0.76.2/trivy_0.76.2_Linux-64bit.tar.gz
+          mkdir -p /tmp/trivy-bin && tar -xzf /tmp/trivy.tar.gz -C /tmp/trivy-bin
+          install -m 0755 /tmp/trivy-bin/trivy /usr/local/bin/trivy
+          trivy --version
+
       - name: Scan repository
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          scan-type: fs
-          scan-ref: .
-          scanners: vuln,misconfig,secret,license
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
-          format: sarif
-          output: trivy-filesystem.sarif
-          limit-severities-for-sarif: true
+        id: trivy-fs
+        run: |
+          set +e
+          trivy fs \
+            --scanners vuln,misconfig,secret,license \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --exit-code 1 \
+            --timeout 20m \
+            --format sarif \
+            --output trivy-filesystem.sarif \
+            --ignored-licenses LGPL-2.1-only,LGPL-2.1-or-later,GPL-2.0-with-classpath-exception \
+            .
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo "Trivy filesystem scan passed: no HIGH/CRITICAL findings."
+          elif [ "$rc" -eq 1 ]; then
+            # Findings explicitly accepted in SECURITY-EXCEPTIONS.md are allowed;
+            # any other HIGH/CRITICAL finding fails the scan.
+            python3 - <<'PY'
+import json, sys
+
+accepted = {
+    ("AWS-0104", "infra/terraform/foundation/main.tf"),
+}
+
+data = json.load(open("trivy-filesystem.sarif"))
+unexpected = []
+for run in data.get("runs", []):
+    for result in run.get("results", []) or []:
+        location = result["locations"][0]["physicalLocation"]
+        finding = (result["ruleId"], location["artifactLocation"]["uri"])
+        if finding not in accepted:
+            unexpected.append(finding)
+
+for rule_id, uri in sorted(unexpected):
+    print(f"UNEXPECTED FINDING: {rule_id} in {uri}")
+if unexpected:
+    sys.exit(1)
+print("Trivy filesystem scan: all findings are explicitly accepted (see SECURITY-EXCEPTIONS.md).")
+PY
+          else
+            echo "Trivy filesystem scan failed with exit code $rc"
+            exit "$rc"
+          fi
 
       - name: Upload Trivy findings to GitHub Security
         if: always() && hashFiles('trivy-filesystem.sarif') != ''
@@ -180,10 +223,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Configure Node.js 22
+      - name: Configure Node.js 26
         uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: "26"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -241,6 +284,7 @@ jobs:
       - name: Generate backend CycloneDX SBOM
         uses: aquasecurity/trivy-action@v0.36.0
         with:
+          version: v0.76.2
           image-ref: openshelf-backend:${{ github.sha }}
           format: cyclonedx
           output: sbom/backend.cdx.json
@@ -249,17 +293,18 @@ jobs:
       - name: Generate frontend CycloneDX SBOM
         uses: aquasecurity/trivy-action@v0.36.0
         with:
+          version: v0.76.2
           image-ref: openshelf-frontend:${{ github.sha }}
           format: cyclonedx
           output: sbom/frontend.cdx.json
           exit-code: "0"
-          skip-setup-trivy: true
 
       - name: Scan backend image
         id: backend_scan
         continue-on-error: true
         uses: aquasecurity/trivy-action@v0.36.0
         with:
+          version: v0.76.2
           image-ref: openshelf-backend:${{ github.sha }}
           scan-type: image
           vuln-type: os,library
@@ -267,13 +312,13 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
           format: table
-          skip-setup-trivy: true
 
       - name: Scan frontend image
         id: frontend_scan
         continue-on-error: true
         uses: aquasecurity/trivy-action@v0.36.0
         with:
+          version: v0.76.2
           image-ref: openshelf-frontend:${{ github.sha }}
           scan-type: image
           vuln-type: os,library
@@ -281,7 +326,6 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
           format: table
-          skip-setup-trivy: true
 
       - name: Upload CycloneDX SBOMs
         uses: actions/upload-artifact@v6

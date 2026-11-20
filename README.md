@@ -20,6 +20,7 @@ PostgreSQL is the authoritative datastore. Apache Solr provides relevance-ranked
 - [Operational notes](#operational-notes)
 - [Known limitations](#known-limitations)
 - [Documentation](#documentation)
+- [SecOps and security scanning](#secops-and-security-scanning)
 
 ## Features
 
@@ -80,7 +81,7 @@ Import path: upload → secure parse → per-record validation → duplicate det
 | Layer | Technology |
 | --- | --- |
 | Frontend | React 19, TypeScript, Vite, Tailwind CSS, React Router, TanStack Query, React Hook Form, Zod, Lucide React |
-| Backend | Java 21, Spring Boot 3.3, Maven, Spring Web, Spring Data JPA, Spring Security, Bean Validation |
+| Backend | Java 21, Spring Boot 3.5, Maven, Spring Web, Spring Data JPA, Spring Security, Bean Validation |
 | Data | PostgreSQL 16 + Flyway |
 | Search | Apache Solr 9.7 + SolrJ |
 | Auth | JWT (HMAC), BCrypt, server-side role checks |
@@ -263,6 +264,27 @@ All application responses use `{ success, data, message, timestamp }`; errors us
 - [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — common failures and recovery
 - [solr/README.md](solr/README.md) — Solr configset notes
 - [samples/xml](samples/xml) — sample Dublin Core imports (valid and mixed)
+
+## SecOps and security scanning
+
+The `OpenShelf SecOps` GitHub Actions workflow runs the following scans on every push to `main`, every pull request to `main`, a weekly schedule, and manual runs:
+
+| Scan | Tool | Gate |
+| --- | --- | --- |
+| Secret scanning | [Gitleaks](https://github.com/gitleaks/gitleaks) | Fails the **Secret Scanning** job on any finding |
+| Dependency vulnerability review | [Dependency Review](https://github.com/actions/dependency-review-action) | Fails the **Dependency Review** job on HIGH findings (PRs only) |
+| CodeQL (Java/Kotlin, JavaScript/TypeScript) | [CodeQL](https://codeql.github.com/) | Fails the **CodeQL** jobs on findings |
+| Filesystem, secrets, dependency and IaC scanning | [Trivy](https://github.com/aquasecurity/trivy) v0.76.2 | Fails the **Trivy Filesystem and IaC Scan** job on HIGH/CRITICAL findings |
+| Backend/frontend build and tests | Maven / Vitest | Fails **Backend Build and Tests** / **Frontend Build and Tests** |
+| Container builds and scans | Docker + Trivy | Fails the **Container Security and SBOM** job on HIGH/CRITICAL image findings, or a failed scan |
+| SBOMs | CycloneDX | Uploaded to GitHub Security as dependency snapshots (`sbom/backend.cdx.json`, `sbom/frontend.cdx.json`) |
+
+- **Vulnerability gates are not disabled:** the Trivy and CodeQL jobs fail on genuine HIGH/CRITICAL findings.
+- **Accepted findings** (see [SECURITY-EXCEPTIONS.md](SECURITY-EXCEPTIONS.md)):
+  - `AWS-0104` — the demo EC2 node requires unrestricted public outbound egress (registries, DNS, apt).
+  - Historical `generic-api-key` on `docs/API.md` — the example JWT in the docs; the value is now the placeholder `"<JWT>"` and the finding is recorded in `.gitleaksignore`.
+  - License findings on the Spring Boot stack (`LGPL-2.1-only`, `LGPL-2.1-or-later`, `GPL-2.0-with-classpath-exception`) — accepted in the Trivy filesystem job via `--ignored-licenses`.
+- **Dependabot** updates run weekly (`.github/dependabot.yml`); every dependency PR runs the full SecOps checks.
 
 ## License
 
