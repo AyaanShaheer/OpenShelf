@@ -1,7 +1,7 @@
 # -------------------------------
 # Stage 1: Frontend build
 # -------------------------------
-FROM node:22-bookworm-slim AS build
+FROM node:26-bookworm-slim AS build
 
 WORKDIR /app
 
@@ -24,7 +24,7 @@ RUN npm run build
 FROM nginxinc/nginx-unprivileged:stable-alpine AS runtime
 
 USER root
-RUN apk update --no-cache
+RUN apk upgrade --no-cache
 
 COPY --from=build \
     --chown=nginx:nginx \
